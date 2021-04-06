@@ -18,16 +18,19 @@ find $tmpDir -name '*_test.go' -delete
   CONTRIBUTING.md \
   docker-compose.yaml \
   Dockerfile \
-  gexec/_fixture \
-  ghttp/protobuf \
+  ginkgo/bootstrap_command.go \
+  ginkgo/generate_command.go \
+  ginkgo/outline \
+  ginkgo/outline_command.go \
+  internal/remote/output_interceptor_unix.go \
+  internal/remote/output_interceptor_win.go \
   go.mod \
   go.sum \
   .github \
   Makefile \
-  matchers/test_data \
-  matchers/match_yaml_matcher.go \
   README.md \
   RELEASING.md \
+  reporters/stenographer/support/go-isatty/isatty_solaris.go \
   .travis.yml )
 
 # Rename module
@@ -37,7 +40,7 @@ find $tmpDir -type f -name '*.go' -exec sed -i 's/"github.com\/onsi/"github.com\
 cp -r $tmpDir/* .
 
 # Apply patch
-# git apply < update.patch
+git apply < update.patch
 
 # Tidy
 go mod tidy

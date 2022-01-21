@@ -17,5 +17,5 @@ update-perform:
 	@./update.sh
 
 clean:
-	find . -maxdepth 1 -type d -not -path './.*' -exec rm -rf \;
-	rm -f *.go
+	find . -maxdepth 1 -type d -not -path './.*' -not -path '.' -exec rm -rf {} \;
+	rm -f *.go go.sum

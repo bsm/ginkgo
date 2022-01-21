@@ -1,3 +1,3 @@
-module github.com/bsm/ginkgo
+module github.com/bsm/ginkgo/v2
 
-go 1.15
+go 1.16

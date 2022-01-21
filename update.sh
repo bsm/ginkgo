@@ -13,25 +13,22 @@ curl -sSL $sourceURL | tar -xz --strip-components=1 -C $tmpDir
 find $tmpDir -name '*_test.go' -delete
 
 # Remove extra files
-( cd $tmpDir; rm -rf \
+( cd $tmpDir; rm -r \
   CHANGELOG.md \
   CONTRIBUTING.md \
-  docker-compose.yaml \
-  Dockerfile \
-  ginkgo/bootstrap_command.go \
-  ginkgo/generate_command.go \
+  ginkgo/generators/bootstrap_command.go \
+  ginkgo/generators/generate_command.go \
+  ginkgo/labels \
   ginkgo/outline \
-  ginkgo/outline_command.go \
-  internal/remote/output_interceptor_unix.go \
-  internal/remote/output_interceptor_win.go \
+  integration \
+  internal/output_interceptor_unix.go \
+  internal/output_interceptor_win.go \
+  internal/test_helpers \
   go.mod \
   go.sum \
   .github \
-  Makefile \
   README.md \
-  RELEASING.md \
-  reporters/stenographer/support/go-isatty/isatty_solaris.go \
-  .travis.yml )
+  RELEASING.md )
 
 # Rename module
 find $tmpDir -type f -name '*.go' -exec sed -i 's/"github.com\/onsi/"github.com\/bsm/g' {} \;

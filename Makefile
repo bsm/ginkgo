@@ -7,7 +7,7 @@ tidy:
 	go mod tidy
 
 version:
-	@cat config/config.go | grep 'VERSION' | cut -d' ' -f4 | jq -r .
+	@cat types/version.go | grep 'VERSION' | cut -d' ' -f4 | jq -r .
 
 update: clean update-perform test
 

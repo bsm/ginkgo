@@ -126,6 +126,24 @@ func runSerial(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig t
 		suite.State = TestSuiteStateFailed
 	}
 
+	if suite.HasProgrammaticFocus {
+		if goFlagsConfig.Cover {
+			fmt.Fprintln(os.Stdout, "coverage: no coverfile was generated because specs are programmatically focused")
+		}
+		if goFlagsConfig.BlockProfile != "" {
+			fmt.Fprintln(os.Stdout, "no block profile was generated because specs are programmatically focused")
+		}
+		if goFlagsConfig.CPUProfile != "" {
+			fmt.Fprintln(os.Stdout, "no cpu profile was generated because specs are programmatically focused")
+		}
+		if goFlagsConfig.MemProfile != "" {
+			fmt.Fprintln(os.Stdout, "no mem profile was generated because specs are programmatically focused")
+		}
+		if goFlagsConfig.MutexProfile != "" {
+			fmt.Fprintln(os.Stdout, "no mutex profile was generated because specs are programmatically focused")
+		}
+	}
+
 	return suite
 }
 
@@ -188,7 +206,7 @@ func runParallel(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig
 		}
 
 		args, err := types.GenerateGinkgoTestRunArgs(procGinkgoConfig, reporterConfig, procGoFlagsConfig)
-		command.AbortIfError("Failed to generate test run argumnets", err)
+		command.AbortIfError("Failed to generate test run arguments", err)
 		args = append([]string{"--test.timeout=0"}, args...)
 		args = append(args, additionalArgs...)
 
@@ -243,16 +261,20 @@ func runParallel(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig
 	}
 
 	if len(coverProfiles) > 0 {
-		coverProfile := AbsPathForGeneratedAsset(goFlagsConfig.CoverProfile, suite, cliConfig, 0)
-		err := MergeAndCleanupCoverProfiles(coverProfiles, coverProfile)
-		command.AbortIfError("Failed to combine cover profiles", err)
-
-		coverage, err := GetCoverageFromCoverProfile(coverProfile)
-		command.AbortIfError("Failed to compute coverage", err)
-		if coverage == 0 {
-			fmt.Fprintln(os.Stdout, "coverage: [no statements]")
+		if suite.HasProgrammaticFocus {
+			fmt.Fprintln(os.Stdout, "coverage: no coverfile was generated because specs are programmatically focused")
 		} else {
-			fmt.Fprintf(os.Stdout, "coverage: %.1f%% of statements\n", coverage)
+			coverProfile := AbsPathForGeneratedAsset(goFlagsConfig.CoverProfile, suite, cliConfig, 0)
+			err := MergeAndCleanupCoverProfiles(coverProfiles, coverProfile)
+			command.AbortIfError("Failed to combine cover profiles", err)
+
+			coverage, err := GetCoverageFromCoverProfile(coverProfile)
+			command.AbortIfError("Failed to compute coverage", err)
+			if coverage == 0 {
+				fmt.Fprintln(os.Stdout, "coverage: [no statements]")
+			} else {
+				fmt.Fprintf(os.Stdout, "coverage: %.1f%% of statements\n", coverage)
+			}
 		}
 	}
 

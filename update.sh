@@ -37,10 +37,10 @@ find $tmpDir -type f -name '*.go' -exec sed -i 's/"github.com\/onsi/"github.com\
 cp -r $tmpDir/* .
 
 # Apply patch
-git apply < update.patch
+# git apply < update.patch
 
 # Tidy
-go mod tidy
+# go mod tidy
 
 # Clean-up
 rm -rf $tmpDir

@@ -1,5 +1,5 @@
 diff --git a/ginkgo/internal/profiles_and_reports.go b/ginkgo/internal/profiles_and_reports.go
-index b20e5e4..d027478 100644
+index 77268c3..57fb7fd 100644
 --- a/ginkgo/internal/profiles_and_reports.go
 +++ b/ginkgo/internal/profiles_and_reports.go
 @@ -9,7 +9,6 @@ import (
@@ -10,7 +10,7 @@ index b20e5e4..d027478 100644
  	"github.com/bsm/ginkgo/v2/reporters"
  	"github.com/bsm/ginkgo/v2/types"
  )
-@@ -191,39 +190,3 @@ func GetCoverageFromCoverProfile(profile string) (float64, error) {
+@@ -199,39 +198,3 @@ func GetCoverageFromCoverProfile(profile string) (float64, error) {
 
  	return coverage, nil
  }
@@ -51,32 +51,48 @@ index b20e5e4..d027478 100644
 -	return nil
 -}
 diff --git a/ginkgo/internal/run.go b/ginkgo/internal/run.go
-index fccbcb6..c04ef6a 100644
+index 3b392a8..deb2077 100644
 --- a/ginkgo/internal/run.go
 +++ b/ginkgo/internal/run.go
-@@ -255,26 +255,6 @@ func runParallel(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig
- 			fmt.Fprintf(os.Stdout, "coverage: %.1f%% of statements\n", coverage)
+@@ -277,42 +277,6 @@ func runParallel(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig
+ 			}
  		}
  	}
 -	if len(blockProfiles) > 0 {
--		blockProfile := AbsPathForGeneratedAsset(goFlagsConfig.BlockProfile, suite, cliConfig, 0)
--		err := MergeProfiles(blockProfiles, blockProfile)
--		command.AbortIfError("Failed to combine blockprofiles", err)
+-		if suite.HasProgrammaticFocus {
+-			fmt.Fprintln(os.Stdout, "no block profile was generated because specs are programmatically focused")
+-		} else {
+-			blockProfile := AbsPathForGeneratedAsset(goFlagsConfig.BlockProfile, suite, cliConfig, 0)
+-			err := MergeProfiles(blockProfiles, blockProfile)
+-			command.AbortIfError("Failed to combine blockprofiles", err)
+-		}
 -	}
 -	if len(cpuProfiles) > 0 {
--		cpuProfile := AbsPathForGeneratedAsset(goFlagsConfig.CPUProfile, suite, cliConfig, 0)
--		err := MergeProfiles(cpuProfiles, cpuProfile)
--		command.AbortIfError("Failed to combine cpuprofiles", err)
+-		if suite.HasProgrammaticFocus {
+-			fmt.Fprintln(os.Stdout, "no cpu profile was generated because specs are programmatically focused")
+-		} else {
+-			cpuProfile := AbsPathForGeneratedAsset(goFlagsConfig.CPUProfile, suite, cliConfig, 0)
+-			err := MergeProfiles(cpuProfiles, cpuProfile)
+-			command.AbortIfError("Failed to combine cpuprofiles", err)
+-		}
 -	}
 -	if len(memProfiles) > 0 {
--		memProfile := AbsPathForGeneratedAsset(goFlagsConfig.MemProfile, suite, cliConfig, 0)
--		err := MergeProfiles(memProfiles, memProfile)
--		command.AbortIfError("Failed to combine memprofiles", err)
+-		if suite.HasProgrammaticFocus {
+-			fmt.Fprintln(os.Stdout, "no mem profile was generated because specs are programmatically focused")
+-		} else {
+-			memProfile := AbsPathForGeneratedAsset(goFlagsConfig.MemProfile, suite, cliConfig, 0)
+-			err := MergeProfiles(memProfiles, memProfile)
+-			command.AbortIfError("Failed to combine memprofiles", err)
+-		}
 -	}
 -	if len(mutexProfiles) > 0 {
--		mutexProfile := AbsPathForGeneratedAsset(goFlagsConfig.MutexProfile, suite, cliConfig, 0)
--		err := MergeProfiles(mutexProfiles, mutexProfile)
--		command.AbortIfError("Failed to combine mutexprofiles", err)
+-		if suite.HasProgrammaticFocus {
+-			fmt.Fprintln(os.Stdout, "no mutex profile was generated because specs are programmatically focused")
+-		} else {
+-			mutexProfile := AbsPathForGeneratedAsset(goFlagsConfig.MutexProfile, suite, cliConfig, 0)
+-			err := MergeProfiles(mutexProfiles, mutexProfile)
+-			command.AbortIfError("Failed to combine mutexprofiles", err)
+-		}
 -	}
 
  	return suite
@@ -107,7 +123,7 @@ index 6a78a63..c638b65 100644
  		BuildVersionCommand(),
  	}
 diff --git a/internal/output_interceptor.go b/internal/output_interceptor.go
-index 6f7c386..1f985e8 100644
+index b59918a..a75ae56 100644
 --- a/internal/output_interceptor.go
 +++ b/internal/output_interceptor.go
 @@ -55,6 +55,10 @@ type OutputInterceptor interface {

@@ -21,7 +21,7 @@ The first commit to Ginkgo was made by [@onsi](https://github.com/onsi/) on Augu
 
 Specifically, Pivotal was one of the lead contributors to Cloud Foundry.  A sprawling distributed system, originally written in Ruby, that was slowly migrating towards the emerging distributed systems language of choice: Go.  At the time (and, arguably, to this day) the landscape of Go's testing infrastructure was somewhat anemic.  For engineers coming from the rich ecosystems of testing frameworks such as [Jasmine](https://jasmine.github.io), [rspec](https://rspec.info), and [Cedar](https://github.com/cedarbdd/cedar) there was a need for a comprehensive testing framework with a mature set of matchers in Go.
 
-The need was twofold: organizational and technical. As a growing organization Pivotal woudl benefit from a shared testing framework to be used across its many teams writing Go.  Engineers jumping from one team to another needed to be able to hit the ground running; we needed fewer testing bikesheds and more shared testing patterns.  And our test-driven development culture put a premium on tests as first-class citizens: they needed to be easy to write, easy to read, and easy to maintain.
+The need was twofold: organizational and technical. As a growing organization Pivotal would benefit from a shared testing framework to be used across its many teams writing Go.  Engineers jumping from one team to another needed to be able to hit the ground running; we needed fewer testing bikesheds and more shared testing patterns.  And our test-driven development culture put a premium on tests as first-class citizens: they needed to be easy to write, easy to read, and easy to maintain.
 
 Moreover, the _nature_ of the code being built - complex distributed systems - required a testing framework that could provide for the needs unique to unit-testing and integration-testing such a system.  We needed to make testing [asynchronous behavior](https://onsi.github.io/gomega/#making-asynchronous-assertions) ubiquitous and straightforward.  We needed to have [parallelizable integration tests](#spec-parallelization) to ensure our test run-times didn't get out of control.  We needed a test framework that helped us [suss out](#spec-randomization) flaky tests and fix them.
 
@@ -557,13 +557,13 @@ We could represent the spec tree that Ginkgo generates as follows:
 Describe: "Books"
   |_BeforeEach: <Closure-A>
   |_Describe: "Extracting names"
-  |_When: "author has both names"
-    |_It: "extracts the last name", <Closure-B>
-    |_It: "extracts the first name", <Closure-C>
-  |_When: "author has one name"
-    |_BeforeEach: <Closure-D>
-    |_It: "extracts the last name", <Closure-E>
-    |_It: "returns empty first name", <Closure-F>
+    |_When: "author has both names"
+      |_It: "extracts the last name", <Closure-B>
+      |_It: "extracts the first name", <Closure-C>
+    |_When: "author has one name"
+      |_BeforeEach: <Closure-D>
+      |_It: "extracts the last name", <Closure-E>
+      |_It: "returns empty first name", <Closure-F>
 ```
 
 Note that Ginkgo is saving off just the setup and subject node closures.
@@ -1160,7 +1160,7 @@ It("panics in a goroutine", func() {
 })
 ```
 
-You must remember follow this pattern when making assertions in goroutines - however, if uncaught, Ginkgo's panic will include a helpful error to remind you to add `defer GinkgoRecover()` to your goroutine.
+You must remember to follow this pattern when making assertions in goroutines - however, if uncaught, Ginkgo's panic will include a helpful error to remind you to add `defer GinkgoRecover()` to your goroutine.
 
 When a failure occurs Ginkgo marks the current spec as failed and moves on to the next spec.  If, however, you'd like to stop the entire suite when the first failure occurs you can run `ginkgo --fail-fast`.
 
@@ -1510,6 +1510,56 @@ var _ = Describe("Math", func() {
 
 Will generate entries named: `1 + 2 = 3`, `-1 + 2 = 1`, `zeros`, `110 = 10 + 100`, and `7 = 7`.
 
+### Alternatives to Dot-Importing Ginkgo
+
+As shown throughout this documentation, Ginkgo users are encouraged to dot-import the Ginkgo DSL into their test suites to effectively extend the Go language with Ginkgo's expressive building blocks:
+
+```go
+import . "github.com/onsi/ginkgo/v2"
+```
+
+Some users prefer to avoid dot-importing dependencies into their code in order to keep their global namespace clean and predictable.  You can, of course, do this with Ginkgo - we recommend using a simple shorthand like `g`:
+
+```go
+import g "github.com/onsi/ginkgo/v2"
+```
+
+now you can write tests as before, albeit with a slight stutter:
+
+```go
+var _ = g.Describe("Books", func() {
+  g.BeforeEach(func() { ... })
+
+  g.It("works as before", func() {
+    g.By("you just need to repeat g. everywhere")
+  })
+})
+```
+
+Alternatively, you can choose to dot-import only _portions_ of Ginkgo's DSL into the global namespace.  The packages under `github.com/onsi/ginkgo/v2/dsl` organize the various pieces of Ginkgo into a series of subpackages.  You can choose to mix-and-match which of these are dot-imported vs namespaced.  For example, you can dot-import the core DSL (which provides the various setup, container, and subject nodes) while namespace importing the decorators DSL:
+
+```go
+import (
+  . "github.com/onsi/ginkgo/v2/dsl/core"  
+  "github.com/onsi/ginkgo/v2/dsl/decorators"  
+)
+
+var _ = It("gives you the core DSL", decorators.Label("and namespaced decorators"), func() {
+  ...
+})
+```
+
+The available DSL packages are:
+
+| Package | Contents |
+|-------|--------|
+| `github.com/onsi/ginkgo/v2/dsl/core` | The core DSL including all container, setup, and subject nodes (`Describe`, `Context`, `BeforeEach`, `BeforeSuite`, `It`, etc...) as well as the most commonly used functions (`RunSpecs`, `Skip`, `Fail`, `By`, `GinkgoT`) | 
+| `github.com/onsi/ginkgo/v2/decorators` | The decorator DSL includes all Ginkgo's decorators (e.g. `Label`, `Ordered`, `Serial`, etc...) |
+| `github.com/onsi/ginkgo/v2/reporting` | The reporting DSL includes all reporting-related nodes and types (e.g. `Report`, `CurrentSpecReport`, `ReportAfterEach`, `AddReportEntry`) |
+| `github.com/onsi/ginkgo/v2/table` | The table DSL includes all table-related types and functions (e.g. `DescribeTable`, `Entry`, `EntryDescription`) |
+
+The DSL packages simply import and then re-export pieces of the Ginkgo DSL provided by `github.com/onsi/ginkgo/v2` so there are no differences in behavior or interoperability if you use the standard dot-import for Ginkgo or pull in the various DSL packages in piecemeal.
+
 ## Running Specs
 
 The previous chapter covered the basics of [Writing Specs](#writing-specs) in Ginkgo.  We explored how Ginkgo lets you use container nodes, subject nodes, and setup nodes to construct hierarchical spec trees; and how Ginkgo transforms those trees into a list of specs to run.
@@ -1731,7 +1781,7 @@ Describe("Storing books in an external database", func() {
   Context("when a book is in the database", func() {
     var book *books.Book
     BeforeEach(func() {
-      lesMiserables = &books.Book{
+      book = &books.Book{
         Title:  "Les Miserables",
         Author: "Victor Hugo",
         Pages:  2783,
@@ -2104,7 +2154,7 @@ BeforeEach(func() {
 })
 ```
 
-now, every spec will be guaranteed to start with the same initial state and we are free to write our specs without worrying about spec polution.
+now, every spec will be guaranteed to start with the same initial state and we are free to write our specs without worrying about spec pollution.
 
 This behavior, however, will cause specs in Ordered containers to break.  Consider this set of specs:
 
@@ -2827,10 +2877,14 @@ When run with `--cover`, Ginkgo will generate a single `coverprofile.out` file t
 
 Ginkgo also honors the `--output-dir` flag when generating coverprofiles.  If you specify `--output-dir` the generated coverprofile will be placed in the requested directory.  If you also specify `--keep-separate-coverprofiles` individual package coverprofiles will be placed in the requested directory and namespaced with a prefix that contains the name of the package in question.
 
+Finally, when running a suite that has [programatically focused specs](#focused-specs) (i.e. specs with the `Focus` decorator or with nodes prefixed with an `F`) Ginkgo exits the suite early with a non-zero exit code.  This interferes with `go test`'s profiling code and prevents profiles from being generated.  Ginkgo will you tell you this has happened.  If you want to profile just a subset of your suite you'll need to use a different [mechanism](#filtering-specs) to filter your specs.
+
 #### Other Profiles
 Running `ginkgo` with any of `--cpuprofile=X`, `--memprofile=X`, `--blockprofile=X`, and `--mutexprofile=X` will generate corresponding profile files for suite that runs.  Doing so will also preserve the test binary generated by Ginkgo to enable users to use `go tool pprof <BINARY> <PROFILE>` to analyze the profile.
 
 By default, the test binary and various profile files are stored in the individual directories of any suites that Ginkgo runs.  If you specify `--output-dir`, however, then these assets are moved to the requested directory and namespaced with a prefix that contains the name of the package in question.
+
+As with coverage computation, these profiles will not generate a file if a suite includes programatically focused specs (see the discussion [above](#computing-coverage)).
 
 ## Ginkgo and Gomega Patterns
 So far we've introduced and described the majority of Ginkgo's capabilities and building blocks.  Hopefully the previous chapters have helped give you a mental model for how Ginkgo specs are written and run.
@@ -2843,7 +2897,7 @@ When running in CI you'll want to make sure that the version of the `ginkgo` CLI
 
 `go run github.com/onsi/ginkgo/v2/ginkgo`
 
-This alone, however, is often not enought.  The Ginkgo CLi includes additional dependencies that aren't part of the Ginkgo library - since your code doesn't import the cli these dependencies probably aren't in your `go.sum` file.  To get around this it is idiomatic Go to introduce a `tools.go` file.  This can go anywhere in your module - for example, Gomega places its `tools.go` at the top-level.  Your `tools.go` file should look like:
+This alone, however, is often not enough.  The Ginkgo CLi includes additional dependencies that aren't part of the Ginkgo library - since your code doesn't import the cli these dependencies probably aren't in your `go.sum` file.  To get around this it is idiomatic Go to introduce a `tools.go` file.  This can go anywhere in your module - for example, Gomega places its `tools.go` at the top-level.  Your `tools.go` file should look like:
 
 ```go
 //go:build tools
@@ -2856,7 +2910,7 @@ import (
 )
 ```
 
-The `//go:build tools` constraint ensures this code is never actuall built, however the `_ "github.com/onsi/ginkgo/v2/ginkgo` import statement is enough to convince `go mod` to include the Ginkgo CLI dependencies in your `go.sum` file.
+The `//go:build tools` constraint ensures this code is never actually built, however the `_ "github.com/onsi/ginkgo/v2/ginkgo` import statement is enough to convince `go mod` to include the Ginkgo CLI dependencies in your `go.sum` file.
 
 Once you have `ginkgo` running on CI, you'll want to pick and choose the optimal set of flags for your test runs.  We recommend the following set of flags when running in a continuous integration environment:
 
@@ -3074,7 +3128,7 @@ this works just fine - however as the suite grows you may see that `environment`
 
 ```go
 var _ = Describe("Smoketests", func() {
-  Describe("Minimally-invasive", Label("PRODUCTION", "STAGING")func() {
+  Describe("Minimally-invasive", Label("PRODUCTION", "STAGING"), func() {
     It("can connect to the server", func() {
       ...
     })
@@ -3214,7 +3268,7 @@ var _ = BeforeSuite(func() {
 Describe("Storing and retrieving the book fixtures", func() {
   for _, book := range fixtureBooks {
     book := book
-    It(fmt.Sprintf("can store and retreive %s", book.Title), func() {
+    It(fmt.Sprintf("can store and retrieve %s", book.Title), func() {
       Expect(library.Store(book)).To(Succeed())
       DeferCleanup(library.Delete, book)
       Expect(library.FindByTitle(book.Title)).To(Equal(book))            
@@ -3697,8 +3751,8 @@ Eventually(func(g Gomega) {
   g.Expect(err).NotTo(HaveOccurred())
   expectedSubject := fmt.Sprintf(`"%s" is available for pickup`, book.Title)
   subjectGetter := func(m gmail.Message) string { return m.Subject }
-  g.Expect(subjects).To(ContainElement(WithTransform(subjectGetter, Equal(expectedSubject))))
-  return subjects, nil
+  g.Expect(messages).To(ContainElement(WithTransform(subjectGetter, Equal(expectedSubject))))
+  return messages, nil
 }).Should(Succeed())
 ```
 
@@ -4450,7 +4504,7 @@ The columns are:
 - Focused (bool): True, if focused. (Conforms to the rules in [Focused Specs](#focused-specs).)
 - Pending (bool): True, if pending. (Conforms to the rules in [Pending Specs](#pending-specs).)
 
-You can set a different output format with the `-format` flag. Accepted formats are `csv`, `indent`, and `json`. The `ident` format is like `csv`, but uses identation to show the nesting of containers and specs. Both the `csv` and `json` formats can be read by another program, e.g., an editor plugin that displays a tree view of Ginkgo tests in a file, or presents a menu for the user to quickly navigate to a container or spec.
+You can set a different output format with the `-format` flag. Accepted formats are `csv`, `indent`, and `json`. The `ident` format is like `csv`, but uses indentation to show the nesting of containers and specs. Both the `csv` and `json` formats can be read by another program, e.g., an editor plugin that displays a tree view of Ginkgo tests in a file, or presents a menu for the user to quickly navigate to a container or spec.
 
 `ginkgo outline` is intended for integration with third-party libraries and applications.  If you simply want to know how a suite will run without running it try `ginkgo -v --dry-run` instead.
 
@@ -4534,7 +4588,7 @@ var _ = Describe("Consumer", func() {
 
 Since `GinkgoT()` implements `Cleanup()` (using `DeferCleanup()` under the hood) Gomock will automatically register a call to `mockCtrl.Finish()` when the controller is created.
 
-When using Gomock you may want to run `ginkgo` with the `-trace` flag to print out stack traces for failures which will help you trace down where, in your code, invalid calls occured.
+When using Gomock you may want to run `ginkgo` with the `-trace` flag to print out stack traces for failures which will help you trace down where, in your code, invalid calls occurred.
 
 ### IDE Support
 Ginkgo works best from the command-line, and [`ginkgo watch`](#watching-for-changes) makes it easy to rerun tests on the command line whenever changes are detected.

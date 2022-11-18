@@ -1,5 +1,5 @@
 /*
-Ginkgo isusually dot-imported via:
+Ginkgo is usually dot-imported via:
 
     import . "github.com/bsm/ginkgo/v2"
 

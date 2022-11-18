@@ -279,6 +279,9 @@ func runParallel(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig
 			}
 		}
 	}
+	if len(blockProfiles) > 0 || len(cpuProfiles) > 0 || len(memProfiles) > 0 || len(mutexProfiles) > 0 {
+		fmt.Fprintln(os.Stdout, "profiles are not supported")
+	}
 
 	return suite
 }
@@ -294,8 +297,8 @@ func runAfterRunHook(command string, noColor bool, suite TestSuite) {
 	if suite.State.Is(TestSuiteStatePassed) {
 		passed = "[PASS]"
 	}
-	command = strings.Replace(command, "(ginkgo-suite-passed)", passed, -1)
-	command = strings.Replace(command, "(ginkgo-suite-name)", suite.PackageName, -1)
+	command = strings.ReplaceAll(command, "(ginkgo-suite-passed)", passed)
+	command = strings.ReplaceAll(command, "(ginkgo-suite-name)", suite.PackageName)
 
 	// Must break command into parts
 	splitArgs := regexp.MustCompile(`'.+'|".+"|\S+`)

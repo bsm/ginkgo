@@ -1,7 +1,7 @@
 /*
-Ginkgo isusually dot-imported via:
+Ginkgo is usually dot-imported via:
 
-    import . "github.com/bsm/ginkgo/v2"
+	import . "github.com/bsm/ginkgo/v2"
 
 however some parts of the DSL may conflict with existing symbols in the user's code.
 
@@ -21,6 +21,7 @@ const GINKGO_VERSION = ginkgo.GINKGO_VERSION
 type GinkgoWriterInterface = ginkgo.GinkgoWriterInterface
 type GinkgoTestingT = ginkgo.GinkgoTestingT
 type GinkgoTInterface = ginkgo.GinkgoTInterface
+type SpecContext = ginkgo.SpecContext
 
 var GinkgoWriter = ginkgo.GinkgoWriter
 var GinkgoConfiguration = ginkgo.GinkgoConfiguration

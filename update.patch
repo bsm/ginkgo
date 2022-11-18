@@ -1,17 +1,70 @@
+diff --git a/core_dsl.go b/core_dsl.go
+index 4184f82..a222000 100644
+--- a/core_dsl.go
++++ b/core_dsl.go
+@@ -22,7 +22,6 @@ import (
+ 	"path/filepath"
+ 	"strings"
+ 
+-	"github.com/go-logr/logr"
+ 	"github.com/bsm/ginkgo/v2/formatter"
+ 	"github.com/bsm/ginkgo/v2/internal"
+ 	"github.com/bsm/ginkgo/v2/internal/global"
+@@ -48,7 +47,6 @@ func init() {
+ 	exitIfErr(err)
+ 	writer := internal.NewWriter(os.Stdout)
+ 	GinkgoWriter = writer
+-	GinkgoLogr = internal.GinkgoLogrFunc(writer)
+ }
+ 
+ func exitIfErr(err error) {
+@@ -114,11 +112,6 @@ You can learn more at https://onsi.github.io/ginkgo/#logging-output
+ */
+ var GinkgoWriter GinkgoWriterInterface
+ 
+-/*
+-GinkgoLogr is a logr.Logger that writes to GinkgoWriter
+-*/
+-var GinkgoLogr logr.Logger
+-
+ // The interface by which Ginkgo receives *testing.T
+ type GinkgoTestingT interface {
+ 	Fail()
+diff --git a/dsl/core/core_dsl.go b/dsl/core/core_dsl.go
+index 3544e78..24b0446 100644
+--- a/dsl/core/core_dsl.go
++++ b/dsl/core/core_dsl.go
+@@ -24,7 +24,6 @@ type GinkgoTInterface = ginkgo.GinkgoTInterface
+ type SpecContext = ginkgo.SpecContext
+ 
+ var GinkgoWriter = ginkgo.GinkgoWriter
+-var GinkgoLogr = ginkgo.GinkgoLogr
+ var GinkgoConfiguration = ginkgo.GinkgoConfiguration
+ var GinkgoRandomSeed = ginkgo.GinkgoRandomSeed
+ var GinkgoParallelProcess = ginkgo.GinkgoParallelProcess
 diff --git a/ginkgo/internal/profiles_and_reports.go b/ginkgo/internal/profiles_and_reports.go
-index 77268c3..57fb7fd 100644
+index 77268c3..25b08bd 100644
 --- a/ginkgo/internal/profiles_and_reports.go
 +++ b/ginkgo/internal/profiles_and_reports.go
 @@ -9,7 +9,6 @@ import (
  	"regexp"
  	"strconv"
-
+ 
 -	"github.com/google/pprof/profile"
  	"github.com/bsm/ginkgo/v2/reporters"
  	"github.com/bsm/ginkgo/v2/types"
  )
+@@ -144,7 +143,7 @@ func FinalizeProfilesAndReportsForSuites(suites TestSuites, cliConfig types.CLIC
+ 	return messages, nil
+ }
+ 
+-//loads each profile, combines them, deletes them, stores them in destination
++// loads each profile, combines them, deletes them, stores them in destination
+ func MergeAndCleanupCoverProfiles(profiles []string, destination string) error {
+ 	combined := &bytes.Buffer{}
+ 	modeRegex := regexp.MustCompile(`^mode: .*\n`)
 @@ -199,39 +198,3 @@ func GetCoverageFromCoverProfile(profile string) (float64, error) {
-
+ 
  	return coverage, nil
  }
 -
@@ -51,10 +104,10 @@ index 77268c3..57fb7fd 100644
 -	return nil
 -}
 diff --git a/ginkgo/internal/run.go b/ginkgo/internal/run.go
-index 3b392a8..deb2077 100644
+index f18ffee..b488065 100644
 --- a/ginkgo/internal/run.go
 +++ b/ginkgo/internal/run.go
-@@ -277,42 +277,6 @@ func runParallel(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig
+@@ -279,41 +279,8 @@ func runParallel(suite TestSuite, ginkgoConfig types.SuiteConfig, reporterConfig
  			}
  		}
  	}
@@ -93,16 +146,17 @@ index 3b392a8..deb2077 100644
 -			err := MergeProfiles(mutexProfiles, mutexProfile)
 -			command.AbortIfError("Failed to combine mutexprofiles", err)
 -		}
--	}
-
++	if len(blockProfiles) > 0 || len(cpuProfiles) > 0 || len(memProfiles) > 0 || len(mutexProfiles) > 0 {
++		fmt.Fprintln(os.Stdout, "profiles are not supported")
+ 	}
+ 
  	return suite
- }
 diff --git a/ginkgo/main.go b/ginkgo/main.go
 index 6a78a63..c638b65 100644
 --- a/ginkgo/main.go
 +++ b/ginkgo/main.go
 @@ -6,9 +6,6 @@ import (
-
+ 
  	"github.com/bsm/ginkgo/v2/ginkgo/build"
  	"github.com/bsm/ginkgo/v2/ginkgo/command"
 -	"github.com/bsm/ginkgo/v2/ginkgo/generators"
@@ -123,17 +177,41 @@ index 6a78a63..c638b65 100644
  		BuildVersionCommand(),
  	}
 diff --git a/internal/output_interceptor.go b/internal/output_interceptor.go
-index b59918a..a75ae56 100644
+index 4a1c094..9f09c8c 100644
 --- a/internal/output_interceptor.go
 +++ b/internal/output_interceptor.go
 @@ -55,6 +55,10 @@ type OutputInterceptor interface {
  	Shutdown()
  }
-
+ 
 +func NewOutputInterceptor() OutputInterceptor {
 +	return NewOSGlobalReassigningOutputInterceptor()
 +}
 +
  type NoopOutputInterceptor struct{}
-
+ 
  func (interceptor NoopOutputInterceptor) StartInterceptingOutput()                      {}
+diff --git a/internal/writer.go b/internal/writer.go
+index 28a45b0..b46ed70 100644
+--- a/internal/writer.go
++++ b/internal/writer.go
+@@ -5,9 +5,6 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"sync"
+-
+-	"github.com/go-logr/logr"
+-	"github.com/go-logr/logr/funcr"
+ )
+ 
+ type WriterMode uint
+@@ -132,9 +129,3 @@ func (w *Writer) Printf(format string, a ...interface{}) {
+ func (w *Writer) Println(a ...interface{}) {
+ 	fmt.Fprintln(w, a...)
+ }
+-
+-func GinkgoLogrFunc(writer *Writer) logr.Logger {
+-	return funcr.New(func(prefix, args string) {
+-		writer.Printf("%s", args)
+-	}, funcr.Options{})
+-}

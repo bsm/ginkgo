@@ -289,7 +289,7 @@ var _ = Describe("Books", func() {
 })
 ```
 
-Our new spec connects with a library service to fetch a summary of the book and asserts that the request succeeds with a meaningful response.  This example previews a few advanced concepts that you'll learn about later in these docs: Ginkgo supports [decorators](#mental-model-spec-decorators) like [SpecTimeout](#the-spectimeout-and-nodetimeout-decorators) to annotate and modify the behavior of specs; and Ginkgo allows you to test potentially long-running code by writing (interruptible)[#spec-timeouts-and-interruptible-nodes] specs that accept a `SpecContext` or `context.Context`.  Now, if more than a second elapses, _or_ an interrupt signal is received, Ginkgo will signal `library.FetchSummary` to clean up by cancelling `ctx`.
+Our new spec connects with a library service to fetch a summary of the book and asserts that the request succeeds with a meaningful response.  This example previews a few advanced concepts that you'll learn about later in these docs: Ginkgo supports [decorators](#mental-model-spec-decorators) like [SpecTimeout](#the-spectimeout-and-nodetimeout-decorators) to annotate and modify the behavior of specs; and Ginkgo allows you to test potentially long-running code by writing [interruptible](#spec-timeouts-and-interruptible-nodes) specs that accept a `SpecContext` or `context.Context`.  Now, if more than a second elapses, _or_ an interrupt signal is received, Ginkgo will signal `library.FetchSummary` to clean up by cancelling `ctx`.
 
 Ginkgo provides an alias for `It` called `Specify`.  `Specify` is functionally identical to `It` but can help your specs read more naturally.
 
@@ -1943,7 +1943,7 @@ var _ = SynchronizedAfterSuite(func() {
 
 This code will spin up a single database and ensure that every parallel Ginkgo process connects to the database and sets up an appropriately sharded namespace.  Ginkgo does all the work of coordinating across these various closures and passing information back and forth - and all the complexity of the parallel setup in the test suite is now contained in the `Synchronized*` setup nodes.
 
-Bu the way, we can clean all this up further using `DeferCleanup`.  `DeferCleanup` is context aware and so knows that any cleanup code registered in a `BeforeSuite`/`SynchronizedBeforeSuite` should run at the end of the suite:
+By the way, we can clean all this up further using `DeferCleanup`.  `DeferCleanup` is context aware and so knows that any cleanup code registered in a `BeforeSuite`/`SynchronizedBeforeSuite` should run at the end of the suite:
 
 ```go
 var dbClient *db.Client
@@ -2175,7 +2175,7 @@ Describe("checking out a book", Ordered, func() {
 })
 ```
 
-here we only set up the `libraryCLient` once before all the specs run, and then tear it down once all the specs complete.
+here we only set up the `libraryClient` once before all the specs run, and then tear it down once all the specs complete.
 
 `BeforeAll` and `AfterAll` nodes can only be introduced within an `Ordered` container.  `BeforeAll` and `AfterAll` can also be nested within containers that appear in `Ordered` containers - in such cases they will run before/after the specs in that nested container.
 
@@ -2196,7 +2196,7 @@ It's a common pattern to have setup and cleanup code at the outer-most level of 
 ```go
 BeforeEach(func() {
     libraryClient = library.NewClient()
-    Expect(libraryClient.Connect()).To(Succeed()
+    Expect(libraryClient.Connect()).To(Succeed())
 
     snapshot := libraryClient.TakeSnapshot()
     DeferCleanup(libraryClient.RestoreSnapshot, snapshot)
@@ -2264,7 +2264,11 @@ Lastly, the `OncePerOrdered` container cannot be applied to the `ReportBeforeEac
 
 Normally, when a spec fails Ginkgo moves on to the next spec.  This is possible because Ginkgo assumes, by default, that all specs are independent.  However `Ordered` containers explicitly opt in to a different behavior.  Spec independence cannot be guaranteed in `Ordered` containers, so Ginkgo treats failures differently.
 
-When a spec in an `Ordered` container fails all subsequent specs are skipped. Ginkgo will then run any `AfterAll` node closures to clean up after the specs.  This failure behavior cannot be overridden.
+When a spec in an `Ordered` container fails all subsequent specs are skipped. Ginkgo will then run any `AfterAll` node closures to clean up after the specs.
+
+You can override this behavior by decorating an `Ordered` container with `ContinueOnFailure`.  This is useful in cases where `Ordered` is being used to provide shared expensive set up for a collection of specs.  When `ContinueOnFailure` is set, Ginkgo will continue running specs even if an earlier spec in the `Ordered` container has failed.  If, however a `BeforeAll` or `OncePerOrdered` `BeforeEach` node has failed then Ginkgo will skip all subsequent specs as the setup for the collection specs is presumed to have failed.
+
+`ContinueOnFailure` can only be applied to the outermost `Ordered` container.  It is an error to apply it to a nested container.
 
 #### Combining Serial and Ordered
 
@@ -3266,7 +3270,6 @@ ReportAfterEach(func(report SpecReport) {
 
 `ReportAfterEach` has several unique properties that distinguish it from `AfterEach`.  Most importantly, `ReportAfterEach` closures are **always** called - even if the spec has failed, is marked pending, or is skipped.  This ensures reports that rely on `ReportAfterEach` are complete.
 
-
 In addition, `ReportAfterEach` closures are called after a spec completes.  i.e. _after_ all `AfterEach` closures have run.  This gives them access to the complete final state of the spec.  Note that if a failure occurs in a `ReportAfterEach` your the spec will be marked as failed.  Subsequent `ReportAfterEach` closures will see the failed state, but not the closure in which the failure occurred.
 
 `ReportAfterEach` is useful if you need to stream or emit up-to-date information about the suite as it runs. Ginkgo also provides `ReportBeforeEach` which is called before the test runs and receives a preliminary `types.SpecReport` - the state of this report will indicate whether the test will be skipped or is marked pending.
@@ -3287,22 +3290,26 @@ ReportAfterEach(func(report SpecReport) {
 
 you'll end up with multiple processes writing to the same file and the output will be a mess.  There is a better approach for this usecase...
 
-#### Reporting Nodes - ReportAfterSuite
-`ReportAfterSuite` nodes behave similarly to `AfterSuite` and can be placed at the top-level of your suite (typically in the suite bootstrap file).  `ReportAfterSuite` nodes take a closure that accepts a single [`Report`]((https://pkg.go.dev/github.com/onsi/ginkgo/v2/types#Report)) argument:
+#### Reporting Nodes - ReportBeforeSuite and ReportAfterSuite
+`ReportBeforeSuite` and `ReportAfterSuite` nodes behave similarly to `BeforeSuite` and `AfterSuite` and can be placed at the top-level of your suite (typically in the suite bootstrap file).  `ReportBeforeSuite` and `ReportAfterSuite` nodes take a closure that accepts a single [`Report`]((https://pkg.go.dev/github.com/onsi/ginkgo/v2/types#Report)) argument:
 
 ```go
+var _ = ReportBeforeSuite(func(report Report) {
+  // process report
+})
+
 var _ = ReportAfterSuite("custom report", func(report Report) {
   // process report
 })
 ```
 
-`Report` contains all available information about the suite, including individual `SpecReport` entries for each spec that ran in the suite, and the overall status of the suite (whether it passed or failed).
+`Report` contains all available information about the suite.  For `ReportAfterSuite` this will include individual `SpecReport` entries for each spec that ran in the suite, and the overall status of the suite (whether it passed or failed).  Since `ReportBeforeSuite` runs before the suite starts - it does not contain any spec reports, however the count of the number of specs that _will_ be run can be extracted from `report.PreRunStats.SpecsThatWillBeRun`.
 
-The closure passed to `ReportAfterSuite` is called exactly once at the end of the suite after any `AfterSuite` nodes have run.  Just like `ReportAfterEach`, `ReportAfterSuite` nodes can't be interrupted by the user to ensure the integrity of the generated report - so you'll want to make sure the code you put in there doesn't have a chance of hanging/getting stuck.
+The closure passed to `ReportBeforeSuite` is called exactly once at the beginning of the suite before any `BeforeSuite` nodes or specs run have run.  The closure passed to `ReportAfterSuite` is called exactly once at the end of the suite after any `AfterSuite` nodes have run.
 
-Finally, and most importantly, when running in parallel `ReportAfterSuite` **only runs on process #1** and receives a `Report` that aggregates the `SpecReports` from all processes.  This allows you to perform any custom suite reporting in one place after all specs have run and not have to worry about aggregating information across multiple parallel processes.
+Finally, and most importantly, when running in parallel both `ReportBeforeSuite` and `ReportAfterSuite` **only run on process #1**.  Gingko guarantess that no other processes will start running their specs until after `ReportBeforeSuite` on process #1 has completed.  Similarly, Ginkgo will only run `ReportAfterSuite` on process #1 after all other processes have finished and exited.  Ginkgo provides a sinle `Report` that aggregates the `SpecReports` from all processes.  This allows you to perform any custom suite reporting in one place after all specs have run and not have to worry about aggregating information across multiple parallel processes.
 
-So, we can rewrite our invalid `ReportAfterEach` example from above into a valid `ReportAfterSuite` example:
+Givne all this, we can rewrite our invalid `ReportAfterEach` example from above into a valid `ReportAfterSuite` example:
 
 ```go
 ReportAfterSuite("custom report", func(report Report) {
@@ -4034,7 +4041,7 @@ Describe("Publishing books", func() {
     Expect(result.EpubContent).To(ContainSubstring("I've ransomed you from fear and hatred, and now I give you back to God."))
 
     //we expect the publisher to close the channel when it's done
-    Eventually(ctx, c).WithTimeout(time.Second.Should(BeClosed())
+    Eventually(ctx, c).WithTimeout(time.Second).Should(BeClosed())
   }, SpecTimeout(time.Second*30)) //this spec has 30 seconds to complete
 })
 ```
@@ -4816,6 +4823,11 @@ The `Ordered` decorator applies to container nodes only.  It is an error to try 
 
 When a spec in an `Ordered` container fails, all subsequent specs in the ordered container are skipped.  Only `Ordered` containers can contain `BeforeAll` and `AfterAll` setup nodes.
 
+#### The ContinueOnFailure Decorator
+The `ContinueOnFailure` decorator applies to outermost `Ordered` container nodes only.  It is an error to try to apply the `ContinueOnFailure` decorator to anything other than an `Ordered` container - and that `Ordered` container must not have any parent `Ordered` containers.
+
+When an `Ordered` container is decorated with `ContinueOnFailure` then the failure of one spec in the container will not prevent other specs from running.  This is useful in cases where `Ordered` containers are being used to have share common (expensive) setup for a collection of specs but the specs, themselves, don't rely on one another.
+
 #### The OncePerOrdered Decorator
 The `OncePerOrdered` decorator applies to setup nodes only.  It is an error to try to apply the `OncePerOrdered` decorator to a container or subject node.
 
@@ -5078,7 +5090,17 @@ will generate a file named `PACKAGE_suite_test.go` and
 ginkgo generate <SUBJECT>
 ```
 
-will generate a file named `SUBJECT_test.go` (or `PACKAGE_test.go` if `<SUBJECT>` is not provided).  Both generators support custom templates using `--template`.  Take a look at the [Ginkgo's CLI code](https://github.com/onsi/ginkgo/tree/master/ginkgo/ginkgo/generators) to see what's available in the template.
+will generate a file named `SUBJECT_test.go` (or `PACKAGE_test.go` if `<SUBJECT>` is not provided).  Both generators support custom templates using `--template` 
+and the option to provide extra custom data to be rendered into the template, besides the default values, using `--template-data`. The custom data should be a well structured JSON file. When loaded into the template the custom data will be available to access from the global key `.CustomData`. For example,
+with a JSON file
+```json
+{ "suitename": "E2E",
+  "labels": ["fast", "parallel", "component"]}
+```
+The custom data can be accessed like so:
+`{{ .CustomData.suitename }}` or `{{ range .CustomData.labels }} {{.}} {{ end }}`
+
+Take a look at the [Ginkgo's CLI code](https://github.com/onsi/ginkgo/tree/master/ginkgo/ginkgo/generators) to see what's available in the template.
 
 ### Creating an Outline of Specs
 
@@ -5090,14 +5112,14 @@ ginkgo outline book_test.go
 
 This generates an outline in a comma-separated-values (CSV) format. Column headers are on the first line, followed by Ginkgo containers, specs, and other identifiers, in the order they appear in the file:
 
-  Name,Text,Start,End,Spec,Focused,Pending
-  Describe,Book,124,973,false,false,false
-  BeforeEach,,217,507,false,false,false
-  Describe,Categorizing book length,513,970,false,false,false
-  Context,With more than 300 pages,567,753,false,false,false
-  It,should be a novel,624,742,true,false,false
-  Context,With fewer than 300 pages,763,963,false,false,false
-  It,should be a short story,821,952,true,false,false
+  Name,Text,Start,End,Spec,Focused,Pending,Labels
+  Describe,Book,124,973,false,false,false,""
+  BeforeEach,,217,507,false,false,false,""
+  Describe,Categorizing book length,513,970,false,false,false,""
+  Context,With more than 300 pages,567,753,false,false,false,""
+  It,should be a novel,624,742,true,false,false,""
+  Context,With fewer than 300 pages,763,963,false,false,false,""
+  It,should be a short story,821,952,true,false,false,""
 
 The columns are:
 
@@ -5108,6 +5130,7 @@ The columns are:
 - Spec (bool): True, if the identifier is a spec.
 - Focused (bool): True, if focused. (Conforms to the rules in [Focused Specs](#focused-specs).)
 - Pending (bool): True, if pending. (Conforms to the rules in [Pending Specs](#pending-specs).)
+- Labels (string): If labels are assigned to nodes then will be shown as double quoted comma separated values. (Conforms to the rules in [Spec Labels](#spec-labels).)
 
 You can set a different output format with the `-format` flag. Accepted formats are `csv`, `indent`, and `json`. The `ident` format is like `csv`, but uses indentation to show the nesting of containers and specs. Both the `csv` and `json` formats can be read by another program, e.g., an editor plugin that displays a tree view of Ginkgo tests in a file, or presents a menu for the user to quickly navigate to a container or spec.
 

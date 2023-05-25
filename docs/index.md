@@ -46,7 +46,23 @@ This fetches Ginkgo and installs the `ginkgo` executable under `$GOBIN` - you'll
 
 You should now be able to run `ginkgo version` at the command line and see the Ginkgo CLI emit a version number.
 
-**Note** you _must_ make sure the version of the `ginkgo` cli you install is the same as the version of Ginkgo in your `go.mod` file.
+**Note** you _must_ make sure the version of the `ginkgo` cli you install is the same as the version of Ginkgo in your `go.mod` file.  You can do this by running `go install github.com/onsi/ginkgo/v2/ginkgo` from your package.
+
+#### Upgrading Ginkgo
+
+To upgrade Ginkgo run:
+
+```bash
+go get github.com/onsi/ginkgo/v2
+go install github.com/onsi/ginkgo/v2/ginkgo
+```
+
+To pick a particular version: 
+
+```bash
+go get github.com/onsi/ginkgo/v2@v2.m.p
+go install github.com/onsi/ginkgo/v2/ginkgo
+```
 
 ### Support Policy
 
@@ -388,7 +404,7 @@ var _ = Describe("Books", func() {
 
 Using container nodes helps clarify the intent behind our suite.  The author name specs are now clearly grouped together and we're exploring the behavior of our code in different contexts.  Most importantly, we're able to scope additional setup nodes to those contexts to refine our spec setup.
 
-When Ginkgo runs a spec it runs through all the `BeforeEach` closures that appear in that spec's hierarchy from the outer-most to the inner-most.  For the `both names` specs, Ginkgo will run the outermost `BeforeEach` closure before the subject node closure.  For the `one name` specs, Ginkgo will run the outermost `BeforeEach` closure and then the innermost `BeforeEach` closure which sets `book.Author = "Hugo"`.
+When Ginkgo runs a spec it runs through all the `BeforeEach` closures that appear in that spec's hierarchy from the outer-most to the inner-most.  If multiple `BeforeEach` nodes appear at the same nesting level they will be run in the order in which they appear in the test file.  For the `both names` specs, Ginkgo will run the outermost `BeforeEach` closure before the subject node closure.  For the `one name` specs, Ginkgo will run the outermost `BeforeEach` closure and then the innermost `BeforeEach` closure which sets `book.Author = "Hugo"`.
 
 Organizing our specs in this way can also help us reason about our spec coverage.  What additional contexts are we missing?  What edge cases should we worry about?  Let's add a few:
 
@@ -1202,6 +1218,66 @@ You must remember to follow this pattern when making assertions in goroutines - 
 
 When a failure occurs Ginkgo marks the current spec as failed and moves on to the next spec.  If, however, you'd like to stop the entire suite when the first failure occurs you can run `ginkgo --fail-fast`.
 
+One last thing before we move on.  When a failure occurs, Ginkgo records and presents the location of the failure to help you pinpoint where to look to debug your specs.  This is typically the line where the call to `Fail` was performed (or, if you're using Gomega, the line where the Gomega assertion failed).  Sometimes, however, you need to control the reported location.  For example, consider the case where you are using a helper function:
+
+```go
+/* === INVALID === */
+func EnsureUserCanRead(book Book, user User) {
+  if book.Title == "Les Miserables" && user.Age <= 3 {
+    Fail("user is too young for this book") //A
+  }
+}
+
+It("can read books", func() {
+  EnsureUserCanRead(book, user) //B
+  user.Read(book)
+})
+```
+
+Now, if the `EnsureUserCanRead` helper fails the location presented to the user will point to `//A`.  Ideally, however we'd prefer that Ginkgo report `//B`.
+
+There are a few ways to solve for this.  The first is to pass `Fail` an `offset` like so:
+
+```go
+func EnsureUserCanRead(book Book, user User) {
+  if book.Title == "Les Miserables" && user.Age <= 3 {
+    Fail("user is too young for this book", 1)
+  }
+}
+```
+
+This will tell Ginkgo to skip a stack frame when calculating the offset.  In this particular case Ginkgo will report the location that called `EnsureUserCanRead`: i.e. `//B`.
+
+This works... however managing offset can quickly get unwieldy.  For example, say we wanted to compose helpers:
+
+```go
+func EnsureUserCanCheckout(book Book, user User) {
+  EnsureUserCanRead(book, user)
+  EnsureUserHasAccessTo(book, user)
+}
+```
+
+in _this_ case, we'd need the offset that `EnsureUserCanRead` passes to `Fail` to be `2` instead of `1`.
+
+Instead of managing offsets you can use `GinkgoHelper()`:
+
+```go
+func EnsureUserCanRead(book Book, user User) {
+  GinkgoHelper()
+  if book.Title == "Les Miserables" && user.Age <= 3 {
+    Fail("user is too young for this book") //note the optional offset is gone
+  }
+}
+
+func EnsureUserCanCheckout(book Book, user User) {
+  GinkgoHelper()
+  EnsureUserCanRead(book, user)
+  EnsureUserHasAccessTo(book, user)
+}
+```
+
+Any function in which `GinkgoHelper()` is called is tracked by Ginkgo and ignored when a failure location is being computed.  This allows you to build reusable test helpers and trust that the location presented to the user will always be in the spec that called the helper, and not the helper itself.
+
 ### Logging Output
 As outlined above, when a spec fails - say via a failed Gomega assertion - Ginkgo will pass the failure message passed to the `Fail`  handler.  Often times the failure message generated by Gomega gives you enough information to understand and resolve the spec failure.
 
@@ -1302,7 +1378,7 @@ DescribeTable("Extracting the author's first and last name",
 You'll be notified with a clear message at runtime if the parameter types don't match the spec closure signature.
 
 #### Mental Model: Table Specs are just Syntactic Sugar
-`DescribeTable` is simply providing syntactic sugar to convert its inputs into a set of standard Ginkgo nodes.  During the [Tree Construction Phase](#mental-model-how-ginkgo-traverses-the-spec-hierarchy) `DescribeTable` is generating a single container node that contains one subject node per table entry.  The description for the container node will be the description passed to `DescribeTable` and the descriptions for the subject nodes will be the descriptions passed to the `Entry`s.  During the Run Phase, when specs run, each subject node will simply invoke the spec closure passed to `DescribeTable`, passing in the parameters associated with the `Entry`.
+`DescribeTable` is simply providing syntactic sugar to convert its Ls into a set of standard Ginkgo nodes.  During the [Tree Construction Phase](#mental-model-how-ginkgo-traverses-the-spec-hierarchy) `DescribeTable` is generating a single container node that contains one subject node per table entry.  The description for the container node will be the description passed to `DescribeTable` and the descriptions for the subject nodes will be the descriptions passed to the `Entry`s.  During the Run Phase, when specs run, each subject node will simply invoke the spec closure passed to `DescribeTable`, passing in the parameters associated with the `Entry`.
 
 To put it another way, the table test above is equivalent to:
 
@@ -2433,6 +2509,20 @@ You can list the labels used in a given package using the `ginkgo labels` subcom
 
 You can iterate on different filters quickly with `ginkgo --dry-run -v --label-filter=FILTER`.  This will cause Ginkgo to tell you which specs it will run for a given filter without actually running anything.
 
+If you want to have finer-grained control within a test about what code to run/not-run depending on what labels match/don't match the filter you can perform a manual check against the label-filter passed into Ginkgo like so:
+
+```go
+It("can save books remotely", Label("network", "slow", "library query") {
+  if Label("performance").MatchesLabelFilter(GinkgoLabelFilter()) {
+    exp := gmeasure.NewExperiment()
+    // perform some benchmarking with exp...
+  }
+  // rest of the saving books test
+})
+```
+
+here `GinkgoLabelFilter()` returns the configured label filter passed in via `--label-filter`.  With a setup like this you could run `ginkgo --label-filter="network && !performance"` - this would select the `"can save books remotely"` spec but not run the benchmarking code in the spec.  Of course, this could also have been modeled as a separate spec with the `performance` label.
+
 Finally, in addition to specifying Labels on subject and container nodes you can also specify suite-wide labels by decorating the `RunSpecs` command with `Label`:
 
 ```go
@@ -2579,17 +2669,47 @@ Stepping back - it bears repeating: you should use `FlakeAttempts` judiciously. 
 ### Getting Visibility Into Long-Running Specs
 Ginkgo is often used to build large, complex, integration suites and it is a common - if painful - experience for these suites to run slowly.  Ginkgo provides numerous mechanisms that enable developers to get visibility into what part of a suite is running and where, precisely, a spec may be lagging or hanging.
 
-Ginkgo can provide a **Progress Report** of what is currently running in response to the `SIGINFO` and `SIGUSR1` signals.  The Progress Report includes information about which node is currently running and the exact line of code that it is currently executing, along with any relevant goroutines that were launched by the spec.  The report also includes the 10 most recent lines written to the `GinkgoWriter`.  A developer waiting for a stuck spec can get this information immediately by sending either the `SIGINFO` or `SIGUSR1` signal (on MacOS/BSD systems, `SIGINFO` can be sent via `^T` - making it especially convenient; if you're on linux you'll need to send `SIGUSR1` to the actual test process spanwed by `ginkgo` - not the `ginkgo` cli process itself).
+Ginkgo can provide a **Progress Report** of what is currently running in response to the `SIGINFO` and `SIGUSR1` signals.  The Progress Report includes information about which node is currently running and the exact line of code that it is currently executing, along with any relevant goroutines that were launched by the spec.  The report also includes the 10 most recent lines written to the `GinkgoWriter`.  A developer waiting for a stuck spec can get this information immediately by sending either the `SIGINFO` or `SIGUSR1` signal (on MacOS/BSD systems, `SIGINFO` can be sent via `^T` - making it especially convenient; if you're on linux you'll need to send `SIGUSR1` to the actual test process spawned by `ginkgo` - not the `ginkgo` cli process itself).
 
 These Progress Reports can also show you a preview of the running source code, but only if Ginkgo can find your source files.  If need be you can tell Ginkgo where to look for source files by specifying `--source-root`.
 
-Finally - you can instruct Ginkgo to provide these Progress Reports automatically whenever a node takes too long to complete.  You do this by passing the `--poll-progress-after=INTERVAL` flag to specify how long Ginkgo should wait before emitting a progress report.  Once this interval is passed Ginkgo can periodically emit Progress Reports - the interval between these reports is controlled via the `--poll-progress-interval=INTERVAL` flag.  By default `--poll-progress-after` is set to `0` and so Ginkgo does not emit Progress Reports.  
+Finally - you can instruct Ginkgo to provide  Progress Reports automatically whenever a node takes too long to complete.  You do this by passing the `--poll-progress-after=INTERVAL` flag to specify how long Ginkgo should wait before emitting a progress report.  Once this interval is passed Ginkgo can periodically emit Progress Reports - the interval between these reports is controlled via the `--poll-progress-interval=INTERVAL` flag.  By default `--poll-progress-after` is set to `0` and so Ginkgo does not emit Progress Reports.  
 
 You can override the global setting of `poll-progess-after` and `poll-progress-interval` on a per-node basis by using the `PollProgressAfter(INTERVAL)` and `PollProgressInterval(INTERVAL)` decorators.  A value of `0` will explicitly turn off Progress Reports for a given node regardless of the global setting.
 
 All Progress Reports generated by Ginkgo - whether interactively via `SIGINFO/SIGUSR1` or automatically via the `PollProgressAfter` configuration - also appear in Ginkgo's [machine-readable reports](#generating-machine-readable-reports).
 
 In addition to these formal Progress Reports, Ginkgo tracks whenever a node begins and ends.  These node `> Enter` and `< Exit` events are usually only logged in the spec's timeline when running with `-vv`, however you can turn them on for other verbosity modes using the `--show-node-events` flag.
+
+#### Attaching Additional Information to Progress Reports
+
+**This section describes an experimental feature and the public-facing interface may change in a future minor version of Ginkgo**
+
+Ginkgo also allows you to attach Progress Report providers to provide additional information when a progress report is generated.  For example, these could query the system under test for diagnostic information about its internal state and report back.  You attach these providers via `AttachProgressReporter`.  For example:
+
+```go
+AttachProgressReporter(func() string {
+  libraryState := library.GetStatusReport()
+  return fmt.Sprintf("%s: %s", library.ClientID, libraryState.Summary)
+})
+```
+
+`AttachProgressReporter` returns a `cancel` func that you can call to unregister the progress reporter.  This allow you to do things like:
+
+```go
+BeforeEach(func() {
+  library = libraryClient.ConnectAs("Jean ValJean")
+  
+  //we attach a progress reporter and can trust that it will be cleaned up after the spec runs
+  DeferCleanup(AttachProgressReporter(func() string {
+    libraryState := library.GetStatusReport()
+    return fmt.Sprintf("%s: %s", library.ClientID, libraryState.Summary)
+  }))
+})
+```
+
+Note that the functions called by `AttachProgressReporter` must not block.  Ginkgo currently has a hard-coded 5 second limit.  If all attached progress reporters take longer than 5 seconds to report back, Ginkgo will move on so as to prevent the suite from blocking.
+
 
 ### Spec Timeouts and Interruptible Nodes
 
@@ -2618,7 +2738,7 @@ It("can save books", func(ctx SpecContext) {
 })
 ```
 
-when such a node is detected Ginkgo will automatically supply a `SpecContext` object.  This `SpecContext` object satisfies the `context.Context` interface and can be used anywhere a `context.Context` object is used.  When a spec times out or is interupted by the user (see below) Ginkgo will cancel the `SpecContext` to signal to the spec that it is time to exit. In the case above, it is assumed that `libraryClient` knows how to return once `ctx` is cancelled.
+when such a node is detected Ginkgo will automatically supply a `SpecContext` object.  This `SpecContext` object satisfies the `context.Context` interface and can be used anywhere a `context.Context` object is used.  When a spec times out or is interrupted by the user (see below) Ginkgo will cancel the `SpecContext` to signal to the spec that it is time to exit. In the case above, it is assumed that `libraryClient` knows how to return once `ctx` is cancelled.
 
 Only setup and subjects nodes can be interruptible.  Container nodes cannot be interrupted.
 
@@ -2881,7 +3001,7 @@ SynchronizedBeforeSuite(func(ctx SpecContext) []byte {
 ```
 are all valid interruptible signatures.  Of course you can specify `context.Context` instead and can mix-and-match interruptibility between the two functions.
 
-Currently the **Reporting** nodes (`ReportAfterEach`, `RepoertAfterSuite`, and `ReportBeforeEach`) cannot be made interruptible and do not accept callbacks that receive a `SpecContext`.  This may change in a future release of Ginkgo (in a backward compatible way).
+Currently the **Reporting** nodes (`ReportAfterEach`, `ReportAfterSuite`, and `ReportBeforeEach`) cannot be made interruptible and do not accept callbacks that receive a `SpecContext`.  This may change in a future release of Ginkgo (in a backward compatible way).
 
 As for **Container** nodes, since these run during the Tree Construction Phase they cannot be made interruptible and so do not accept functions that expect a context.  And since the `By` annotation is simply syntactic sugar enabling more detailed spec documentation, any callbacks passed to `By` cannot be independently marked as interruptible (you should, instead, use the `context` passed into the node that you're calling `By` from).
 
@@ -3309,7 +3429,7 @@ The closure passed to `ReportBeforeSuite` is called exactly once at the beginnin
 
 Finally, and most importantly, when running in parallel both `ReportBeforeSuite` and `ReportAfterSuite` **only run on process #1**.  Gingko guarantess that no other processes will start running their specs until after `ReportBeforeSuite` on process #1 has completed.  Similarly, Ginkgo will only run `ReportAfterSuite` on process #1 after all other processes have finished and exited.  Ginkgo provides a sinle `Report` that aggregates the `SpecReports` from all processes.  This allows you to perform any custom suite reporting in one place after all specs have run and not have to worry about aggregating information across multiple parallel processes.
 
-Givne all this, we can rewrite our invalid `ReportAfterEach` example from above into a valid `ReportAfterSuite` example:
+Given all this, we can rewrite our invalid `ReportAfterEach` example from above into a valid `ReportAfterSuite` example:
 
 ```go
 ReportAfterSuite("custom report", func(report Report) {
@@ -3392,7 +3512,16 @@ Ginkgo supports `--race` to analyze race conditions, `--cover` to compute code c
 `ginkgo -vet` allows you to configure the set of checks that are applied when your code is compiled.  `ginkgo` defaults to the set of default checks that `go test` uses and you can specify additional checks by passing a comma-separated list to `--vet`.  The set of available checks can be found by running `go doc cmd/vet`.
 
 #### Computing Coverage
-`ginkgo -cover` will compute and emit code coverage.  When running multiple suites Ginkgo will emit coverage for each suite and then emit a composite coverage across all running suites.  As with `go test` the default behavior for a given suite is to measure the coverage it provides for the code in the suite's package - however you can extend coverage to additional packages using `--coverpkg`.  You can also specify the `--covermode` to be one of `set` ("was this code called at all?"), `count` (how many times was it called?) and `atomic` (same as count, but threadsafe and expensive).  If you run `ginkgo --race --cover` the `--covermode` is automatically set to `atomic`.
+`ginkgo -cover` will compute and emit code coverage.  When running multiple suites Ginkgo will emit coverage for each suite and then emit a composite coverage across all running suites.  As with `go test` the default behavior for a given suite is to measure the coverage it provides for the code in the suite's package - however you can extend coverage to additional packages using `--coverpkg`.  You can provide a comma-separated list of package names (as they appear in `import` statements) or a relative path.  You can also use `...` for recursion.  For example, say we have a package called "github.com/foo/bar".  The following are equivalent:
+
+```bash
+ginkgo -coverpkg=./... -r
+ginkgo -coverpkg=github.com/foo/bar/... -r
+```
+
+and will have the effect of calculating coverage for **all** code in the package by **all** specs in the package.
+
+You can also specify the `--covermode` to be one of `set` ("was this code called at all?"), `count` (how many times was it called?) and `atomic` (same as count, but threadsafe and expensive).  If you run `ginkgo --race --cover` the `--covermode` is automatically set to `atomic`.
 
 When run with `--cover`, Ginkgo will generate a single `coverprofile.out` file that captures the coverage statistics of all the suites that ran.  You can change the name of this file by specifying `-coverprofile=filename`.  If you would like to keep separate coverprofiles for each suite use the `--keep-separate-coverprofiles` option.
 
@@ -3417,21 +3546,6 @@ In this chapter we'll switch gears and illustrate common patterns for how Ginkgo
 When running in CI you must make sure that the version of the `ginkgo` CLI you are using matches the version of Ginkgo in your `go.mod` file.  You can ensure this by invoking the `ginkgo` command via `go run`:
 
 `go run github.com/onsi/ginkgo/v2/ginkgo`
-
-This alone, however, is often not enough.  The Ginkgo CLI includes additional dependencies that aren't part of the Ginkgo library - since your code doesn't import the cli these dependencies probably aren't in your `go.sum` file.  To get around this it is idiomatic Go to introduce a `tools.go` file.  This can go anywhere in your module - for example, Gomega places its `tools.go` at the top-level.  Your `tools.go` file should look like:
-
-```go
-//go:build tools
-// +build tools
-
-package main
-
-import (
-  _ "github.com/onsi/ginkgo/v2/ginkgo"
-)
-```
-
-The `//go:build tools` constraint ensures this code is never actually built, however the `_ "github.com/onsi/ginkgo/v2/ginkgo` import statement is enough to convince `go mod` to include the Ginkgo CLI dependencies in your `go.sum` file.
 
 Once you have `ginkgo` running on CI, you'll want to pick and choose the optimal set of flags for your test runs.  We recommend the following set of flags when running in a continuous integration environment:
 
@@ -4896,6 +5010,25 @@ now, if the `It` defined in `SharedBehaviorIt` the location reported by Ginkgo w
 
 If multiple `Offset`s are provided on a given node, only the last one is used.
 
+Lastly, since introducing `Offset` Ginkgo has introduced `GinkgoHelper()` which marks the current function as a test helper who's location should be skipped when determining the location for a node.  We generally recommend using `GinkgoHelper()` instead of `Offset()` to manage how locations are computed.  The above example could be rewritten as
+
+```go
+SharedBehaviorIt := func() {
+  GinkgoHelper()
+  It("does something common and complicated", func() {
+    ...
+  })
+}
+
+Describe("thing A", func() {
+  SharedBehaviorIt()
+})
+
+Describe("thing B", func() {
+  SharedBehaviorIt()
+})
+```
+
 #### The CodeLocation Decorator
 In addition to `Offset`, users can decorate nodes with a `types.CodeLocation`.  `CodeLocation`s are the structs Ginkgo uses to capture location information.  You can, for example, set a custom location using `types.NewCustomCodeLocation(message string)`.  Now when the location of the node is emitted the passed in `message` will be printed out instead of the usual `file:line` location.
 
@@ -5100,7 +5233,7 @@ with a JSON file
 The custom data can be accessed like so:
 `{{ .CustomData.suitename }}` or `{{ range .CustomData.labels }} {{.}} {{ end }}`
 
-Take a look at the [Ginkgo's CLI code](https://github.com/onsi/ginkgo/tree/master/ginkgo/ginkgo/generators) to see what's available in the template.
+Take a look at the [Ginkgo's CLI code](https://github.com/onsi/ginkgo/tree/master/ginkgo/generators) to see what's available in the template.
 
 ### Creating an Outline of Specs
 
@@ -5218,11 +5351,16 @@ Since `GinkgoT()` implements `Cleanup()` (using `DeferCleanup()` under the hood)
 
 When using Gomock you may want to run `ginkgo` with the `-trace` flag to print out stack traces for failures which will help you trace down where, in your code, invalid calls occurred.
 
+`GinkgoT()` also provides additional methods that are Ginkgo-specific.  This allows rich third-party integrations to be built on top of Ginkgo - with GinkgoT() serving as a single connection point.
+
 ### IDE Support
 Ginkgo works best from the command-line, and [`ginkgo watch`](#watching-for-changes) makes it easy to rerun tests on the command line whenever changes are detected.
 
 There are a set of [completions](https://github.com/onsi/ginkgo-sublime-completions) available for [Sublime Text](https://www.sublimetext.com/) (just use [Package Control](https://sublime.wbond.net/) to install `Ginkgo Completions`) and for [VS Code](https://code.visualstudio.com/) (use the extensions installer and install vscode-ginkgo).  There is also a VS Code extension to run specs from VSCode called [Ginkgo Test Explorer](https://github.com/joselitofilho/ginkgoTestExplorer).
 
 IDE authors can set the `GINKGO_EDITOR_INTEGRATION` environment variable to any non-empty value to enable coverage to be displayed for focused specs. By default, Ginkgo will fail with a non-zero exit code if specs are focused to ensure they do not pass in CI.
+
+### The ginkgolinter
+The [ginkgolinter](https://github.com/nunnatsa/ginkgolinter) enforces several patterns of using ginkgo and gomega. It can run as an independent executable or as part of the [golangci-lint](https://golangci-lint.run/) linter. See the ginkgolinter [READMY](https://github.com/nunnatsa/ginkgolinter#readme) for more details.
 
 {% endraw  %}

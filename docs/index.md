@@ -2597,8 +2597,8 @@ These mechanisms can all be used in concert.  They combine with the following ru
 
 - `Pending` specs are always pending and can never be coerced to run by another filtering mechanism.
 - Specs that invoke `Skip()` will always be skipped regardless of other filtering mechanisms.
-- The CLI based filters (`--label-filter`, `--focus-file/--skip-file`, `--focus/--skip`) **always** override any programmatic focus.
-- When multiple CLI filters are provided they are all ANDed together.  The spec must satisfy the label filter query **and** any location-based filters **and** any description based filters.
+- Programmatic filters always apply and result in a non-zero exit code.  Any additional CLI filters only apply to the subset of specs selected by the programmatic filters.
+- When multiple CLI filters (`--label-filter`, `--focus-file/--skip-file`, `--focus/--skip`) are provided they are all ANDed together.  The spec must satisfy the label filter query **and** any location-based filters **and** any description based filters.
 
 ### Repeating Spec Runs and Managing Flaky Specs
 
@@ -4387,7 +4387,7 @@ Eventually(func(g Gomega, ctx SpecContext) []string { //note: g Gomega must go f
   for _, message := range messages {
     subjects = append(subjects, message.Subject)
   }
-  return subjects, nil
+  return subjects
 }).WithContext(ctx).Should(ContainElement(fmt.Sprintf(`"%s" is available for pickup`, book.Title)))
 ```
 
@@ -4402,7 +4402,6 @@ Eventually(func(g Gomega, ctx SpecContext) {
     subjects = append(subjects, message.Subject)
   }
   g.Expect(subjects).To(ContainElement(fmt.Sprintf(`"%s" is available for pickup`, book.Title)))
-  return subjects, nil
 }).WithContext(ctx).Should(Succeed())
 ```
 
@@ -4419,7 +4418,6 @@ Eventually(func(g Gomega, ctx SpecContext) {
   expectedSubject := fmt.Sprintf(`"%s" is available for pickup`, book.Title)
   subjectGetter := func(m gmail.Message) string { return m.Subject }
   g.Expect(messages).To(ContainElement(WithTransform(subjectGetter, Equal(expectedSubject))))
-  return messages, nil
 }).WithContext(ctx).Should(Succeed())
 ```
 
